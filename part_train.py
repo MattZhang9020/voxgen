@@ -1,14 +1,14 @@
 import os
 import re
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import concurrent.futures
 
 import tensorflow as tf
 import numpy as np
 
 from tqdm import tqdm
-
-tf.get_logger().setLevel('INFO')
 
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
