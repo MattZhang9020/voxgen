@@ -49,7 +49,7 @@ class DataGenerator:
         self.each_chair_parts_count = np.load(each_chair_parts_count_pth)[:objs_count]
         self.num_objts = len(self.each_chair_parts_count)
 
-        self.outlier_indices = set(np.load(outlier_indices_pth))
+        self.outlier_indices = np.load(outlier_indices_pth)
 
         self.data_names = self._get_data_names()
         self.num_parts = len(self.data_names)
@@ -64,11 +64,19 @@ class DataGenerator:
 
         base_index = 0
 
-        for i in range(self.num_objts):
-            if i not in self.outlier_indices:
+        num_objts_orig = self.num_objts
+
+        outlier_indices_set = set(self.outlier_indices)
+
+        for i in range(num_objts_orig):
+            if i not in outlier_indices_set:
                 for j in range(self.each_chair_parts_count[i]):
                     data_names_out.append(data_names_orig[base_index+j])
+            else:
+                self.num_objts -= 1
             base_index += self.each_chair_parts_count[i]
+
+        self.each_chair_parts_count = np.delete(self.each_chair_parts_count, self.outlier_indices)
 
         return data_names_out
 
