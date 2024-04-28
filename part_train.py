@@ -270,7 +270,7 @@ if __name__ == '__main__':
         'model_conv_size': 4,
         'model_num_latent_codes_parts': data_generator.num_parts,
         'model_learning_rate_network': 5e-4,
-        'model_learning_rate_codes': 5e-4,
+        'model_learning_rate_codes': 1e-3,
         'model_voxel_map_shape': VOXEL_MAP_SHAPE,
         'model_checkpoint_dir': './ckpt_dist'
     }
