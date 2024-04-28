@@ -11,7 +11,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
 EACH_CHAIR_PARTS_COUNT_PTH = "./each_chair_parts_count.npy"
-OUTLIER_INDICES_PTH = ".\\dataset\\outlier_indices.npy"
+OUTLIER_INDICES_PTH = "./outlier_indices.npy"
 DATASET_DIR_PTH = "./chair_voxel_data"
 
 LOAD_OBJS_COUNT = None
