@@ -72,7 +72,7 @@ class DataGenerator:
         def load_data(data_pth):
             return np.load(data_pth)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             data_paths = [os.path.join(self.dataset_dir_pth, data_name) for data_name in self.data_names]
             part_voxels_coords = list(tqdm(executor.map(load_data, data_paths), total=len(data_paths)))
 
@@ -104,8 +104,6 @@ class PartNetwork:
         self.model_voxel_map_shape = hparam['model_voxel_map_shape']
 
         self.checkpoint_dir = hparam['model_checkpoint_dir']
-
-        self.ramdom_projection_num = hparam['modelramdom_projection_num']
 
         self.trained_epoch = tf.Variable(0)
 
@@ -270,8 +268,7 @@ if __name__ == '__main__':
         'model_learning_rate_network': 5e-4,
         'model_learning_rate_codes': 5e-4,
         'model_voxel_map_shape': VOXEL_MAP_SHAPE,
-        'model_checkpoint_dir': './ckpt_dist',
-        'modelramdom_projection_num': 5
+        'model_checkpoint_dir': './ckpt_dist'
     }
 
     part_network = PartNetwork(model_hparam)
