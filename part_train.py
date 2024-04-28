@@ -1,11 +1,15 @@
-from tqdm import tqdm
-import numpy as np
-import tensorflow as tf
-import concurrent.futures
 import os
 import re
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+import concurrent.futures
+
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+
+from tqdm import tqdm
 
 
 mirrored_strategy = tf.distribute.MirroredStrategy()
