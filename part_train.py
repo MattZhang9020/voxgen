@@ -1,14 +1,12 @@
+from tqdm import tqdm
+import numpy as np
+import tensorflow as tf
+import concurrent.futures
 import os
 import re
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import concurrent.futures
-
-import tensorflow as tf
-import numpy as np
-
-from tqdm import tqdm
 
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
@@ -279,10 +277,9 @@ if __name__ == '__main__':
     part_network = PartNetwork(model_hparam)
 
     max_no_improvement = 3
-    min_loss_change = 5e-2  # 5%
+    min_loss_change = 10
 
     prev_avg_loss = None
-    prev_change = None
 
     no_improvement_count = 0
 
@@ -307,18 +304,15 @@ if __name__ == '__main__':
 
             pbar.set_postfix({'Avg Loss': '{:.9f}'.format(avg_loss)})
 
-        if prev_change is not None:
+        if prev_avg_loss is not None:
             curr_change = prev_avg_loss - avg_loss
 
-            if curr_change < 0 or (curr_change / prev_change) < min_loss_change:
+            if curr_change < min_loss_change:
                 no_improvement_count += 1
-                print('Loss change: {:.3f} No improvement count increased to {}.'.format(curr_change/prev_change, no_improvement_count))
+                print('No improvement count increased to {}.'.format(no_improvement_count))
             else:
                 no_improvement_count = 0
-                print('Loss change: {:.3f} No improvement count reset.'.format(curr_change/prev_change))
-
-        if prev_avg_loss is not None:
-            prev_change = prev_avg_loss - avg_loss
+                print('Reset No improvement count.')
 
         prev_avg_loss = avg_loss
 
