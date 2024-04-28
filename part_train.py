@@ -14,7 +14,6 @@ EACH_CHAIR_PARTS_COUNT_PTH = "./each_chair_parts_count.npy"
 OUTLIER_INDICES_PTH = "./outlier_indices.npy"
 DATASET_DIR_PTH = "./chair_voxel_data"
 
-LOAD_OBJS_COUNT = None
 VOXEL_MAP_SHAPE = (128, 128, 128)
 
 BATCH_SIZE_PER_REPLICA = 32
@@ -43,10 +42,10 @@ def tf_data_to_dense(voxel_data, voxel_map_shape=(128, 128, 128)):
 
 
 class DataGenerator:
-    def __init__(self, dataset_dir_pth, each_chair_parts_count_pth, outlier_indices_pth, objs_count=None, batch_size=4):
+    def __init__(self, dataset_dir_pth, each_chair_parts_count_pth, outlier_indices_pth, batch_size=4):
         self.dataset_dir_pth = dataset_dir_pth
 
-        self.each_chair_parts_count = np.load(each_chair_parts_count_pth)[:objs_count]
+        self.each_chair_parts_count = np.load(each_chair_parts_count_pth)
         self.num_objts = len(self.each_chair_parts_count)
 
         self.outlier_indices = np.load(outlier_indices_pth)
@@ -61,23 +60,20 @@ class DataGenerator:
     def _get_data_names(self):
         data_names_orig = sorted_alphanumeric(os.listdir(self.dataset_dir_pth))
         data_names_out = []
-
+        
         base_index = 0
-
-        num_objts_orig = self.num_objts
-
+        
         outlier_indices_set = set(self.outlier_indices)
-
-        for i in range(num_objts_orig):
+        
+        for i in range(self.num_objts):
             if i not in outlier_indices_set:
                 for j in range(self.each_chair_parts_count[i]):
                     data_names_out.append(data_names_orig[base_index+j])
-            else:
-                self.num_objts -= 1
             base_index += self.each_chair_parts_count[i]
-
+        
         self.each_chair_parts_count = np.delete(self.each_chair_parts_count, self.outlier_indices)
-
+        self.num_objts = len(self.each_chair_parts_count)
+            
         return data_names_out
 
     def _load_voxel_data(self):
@@ -270,7 +266,6 @@ if __name__ == '__main__':
     data_generator = DataGenerator(dataset_dir_pth=DATASET_DIR_PTH,
                                    each_chair_parts_count_pth=EACH_CHAIR_PARTS_COUNT_PTH,
                                    outlier_indices_pth=OUTLIER_INDICES_PTH,
-                                   objs_count=LOAD_OBJS_COUNT,
                                    batch_size=GLOBAL_BATCH_SIZE)
 
     dataset = data_generator.get_tf_dataset()
