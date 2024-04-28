@@ -82,9 +82,9 @@ class DataGenerator:
         print('Generating TF dataset.')
 
         part_indices = tf.range(self.num_parts)
-        
+
         part_voxels_coords = tf.RaggedTensor.from_row_lengths(tf.concat(self.part_voxels_coords, axis=0), row_lengths=[a.shape[0] for a in self.part_voxels_coords])
-        
+
         dataset = tf.data.Dataset.from_tensor_slices((part_indices, part_voxels_coords)).batch(self.batch_szie, drop_remainder=True)
         return dataset
 
@@ -312,8 +312,9 @@ if __name__ == '__main__':
                 no_improvement_count += 1
                 print('No improvement count increased to {}.'.format(no_improvement_count))
             else:
+                if no_improvement_count != 0:
+                    print('Reset No improvement count.')
                 no_improvement_count = 0
-                print('Reset No improvement count.')
 
         prev_avg_loss = avg_loss
 
