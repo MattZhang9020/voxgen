@@ -261,7 +261,7 @@ class PartNetwork:
 if __name__ == '__main__':
     data_generator = DataGenerator(dataset_dir_pth=DATASET_DIR_PTH,
                                    each_chair_parts_count_pth=EACH_CHAIR_PARTS_COUNT_PTH,
-                                   outlier_indices=OUTLIER_INDICES_PTH,
+                                   outlier_indices_pth=OUTLIER_INDICES_PTH,
                                    objs_count=LOAD_OBJS_COUNT,
                                    batch_size=GLOBAL_BATCH_SIZE)
 
