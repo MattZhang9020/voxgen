@@ -11,6 +11,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
 EACH_CHAIR_PARTS_COUNT_PTH = "./each_chair_parts_count.npy"
+OUTLIER_INDICES_PTH = ".\\dataset\\outlier_indices.npy"
 DATASET_DIR_PTH = "./chair_voxel_data"
 
 LOAD_OBJS_COUNT = None
@@ -42,29 +43,34 @@ def tf_data_to_dense(voxel_data, voxel_map_shape=(128, 128, 128)):
 
 
 class DataGenerator:
-    def __init__(self, dataset_dir_pth, each_chair_parts_count_pth, objs_count=None, batch_size=4):
+    def __init__(self, dataset_dir_pth, each_chair_parts_count_pth, outlier_indices_pth, objs_count=None, batch_size=4):
         self.dataset_dir_pth = dataset_dir_pth
 
         self.each_chair_parts_count = np.load(each_chair_parts_count_pth)[:objs_count]
         self.num_objts = len(self.each_chair_parts_count)
 
-        self.data_names = np.array(sorted_alphanumeric(os.listdir(self.dataset_dir_pth)), dtype=str)[:self._get_total_parts_size()]
+        self.outlier_indices = set(np.load(outlier_indices_pth))
+
+        self.data_names = self._get_data_names()
         self.num_parts = len(self.data_names)
 
         self.batch_szie = batch_size
 
         self.part_voxels_coords = self._load_voxel_data()
 
-    def _get_total_parts_size(self):
-        count = 0
+    def _get_data_names(self):
+        data_names_orig = sorted_alphanumeric(os.listdir(self.dataset_dir_pth))
+        data_names_out = []
 
-        if self.num_objts == None:
-            return None
+        base_index = 0
 
         for i in range(self.num_objts):
-            count += self.each_chair_parts_count[i]
+            if i not in self.outlier_indices:
+                for j in range(self.each_chair_parts_count[i]):
+                    data_names_out.append(data_names_orig[base_index+j])
+            base_index += self.each_chair_parts_count[i]
 
-        return count
+        return data_names_out
 
     def _load_voxel_data(self):
         print('Trying to load {} objects with total {} parts.'.format(self.num_objts, self.num_parts))
@@ -255,6 +261,7 @@ class PartNetwork:
 if __name__ == '__main__':
     data_generator = DataGenerator(dataset_dir_pth=DATASET_DIR_PTH,
                                    each_chair_parts_count_pth=EACH_CHAIR_PARTS_COUNT_PTH,
+                                   outlier_indices=OUTLIER_INDICES_PTH,
                                    objs_count=LOAD_OBJS_COUNT,
                                    batch_size=GLOBAL_BATCH_SIZE)
 
