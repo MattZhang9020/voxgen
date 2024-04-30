@@ -99,7 +99,7 @@ class DataGenerator:
 
         part_voxels_coords = tf.RaggedTensor.from_row_lengths(tf.concat(self.part_voxels_coords, axis=0), row_lengths=[a.shape[0] for a in self.part_voxels_coords])
 
-        dataset = tf.data.Dataset.from_tensor_slices((part_indices, part_voxels_coords)).batch(self.batch_szie, drop_remainder=True)
+        dataset = tf.data.Dataset.from_tensor_slices((part_indices, part_voxels_coords)).batch(self.batch_szie, drop_remainder=True).cache().prefetch(tf.data.AUTOTUNE)
         return dataset
 
     def reset_index(self):
@@ -315,9 +315,11 @@ if __name__ == '__main__':
 
             mirrored_strategy.run(part_network.update_latent_code_vars, args=(latent_code_indices, latent_code_vars,))
 
-            avg_loss = sum(total_loss) / len(total_loss)
-
-            pbar.set_postfix({'Avg Loss': '{:.9f}'.format(avg_loss)})
+            pbar.set_postfix({'Loss': '{:.9f}'.format(loss)})
+    
+        avg_loss = sum(total_loss) / len(total_loss)
+        
+        print('Average Loss: {:.9f}'.format(avg_loss))
 
         if prev_avg_loss is not None:
             curr_change = prev_avg_loss - avg_loss
