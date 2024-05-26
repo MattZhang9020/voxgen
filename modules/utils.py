@@ -58,11 +58,12 @@ def plot_objt(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     
 
 def dataloader_collate_fn(batch):
-    return torch.nested.nested_tensor(batch, dtype=torch.int)
+    return [torch.tensor(parts, dtype=torch.int) for parts in batch]
 
 
 def get_occurrence_map(voxel_coords, voxel_map_shape=(128, 128, 128)):
-    occurrence_map = torch.zeros(voxel_map_shape, dtype=torch.float32)
-    for coords in voxel_coords:
-        occurrence_map[coords] = 1.0
+    occurrence_map = torch.zeros(voxel_map_shape, dtype=torch.float32, pin_memory=True)
+    with torch.no_grad():
+        for coords in voxel_coords:
+            occurrence_map[coords] = 1.0
     return occurrence_map

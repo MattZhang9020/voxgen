@@ -88,7 +88,7 @@ class ResidualBlock(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, model_pram, device):
+    def __init__(self, model_pram):
         super().__init__()
 
         self.num_parts = model_pram['num_parts']
@@ -103,23 +103,23 @@ class Decoder(nn.Module):
             AttentionBlock(512),
             ResidualBlock(512, 512),
             nn.Upsample(scale_factor=2),
-            nn.Conv3d(512, 512, kernel_size=3, padding=1),
-            ResidualBlock(512, 512),
-            nn.Upsample(scale_factor=2),
-            nn.Conv3d(512, 512, kernel_size=3, padding=1),
-            ResidualBlock(512, 256),
+            nn.Conv3d(512, 256, kernel_size=3, padding=1),
+            ResidualBlock(256, 256),
             nn.Upsample(scale_factor=2),
             nn.Conv3d(256, 256, kernel_size=3, padding=1),
-            ResidualBlock(256, 128),
+            ResidualBlock(256, 256),
+            nn.Upsample(scale_factor=2),
+            nn.Conv3d(256, 128, kernel_size=3, padding=1),
+            ResidualBlock(128, 128),
             nn.GroupNorm(32, 128),
             nn.SiLU(),
             nn.Conv3d(128, 1, kernel_size=3, padding=1)
-        ]).to(device)
+        ])
 
-        self.latents = torch.rand(self.num_parts, *self.latent_dim, device=device)
+        self.latents = nn.ParameterList([nn.Parameter(torch.randn(*self.latent_dim)) for _ in range(self.num_parts)])
 
         self.decoder_optim = optim.AdamW(self.decoder.parameters(), lr=self.decoder_lr)
-        self.latent_optim = optim.AdamW([self.latents], lr=self.latent_lr)
+        self.latent_optim = optim.AdamW(self.latents, lr=self.latent_lr)
 
         self.loss_fn = nn.BCEWithLogitsLoss()
 
@@ -129,10 +129,10 @@ class Decoder(nn.Module):
         return x
 
     def train_step(self, indices, labels):
-        self.decoder_optim.zero_grad()
-        self.latent_optim.zero_grad()
-        
-        latents_batch = self.latents[indices]
+        self.decoder_optim.zero_grad(set_to_none=True)
+        self.latent_optim.zero_grad(set_to_none=True)
+
+        latents_batch = torch.stack([self.latents[i] for i in indices])
         outputs = self(latents_batch)
 
         loss = self.loss_fn(outputs, labels)
@@ -140,7 +140,5 @@ class Decoder(nn.Module):
 
         self.decoder_optim.step()
         self.latent_optim.step()
-        
-        self.latents[indices] = latents_batch.detach().clone()
 
         return loss.item()
