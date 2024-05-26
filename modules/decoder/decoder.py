@@ -1,5 +1,7 @@
 import torch
 
+import numpy as np
+
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
@@ -48,12 +50,12 @@ class AttentionBlock(nn.Module):
         residue = x
         x = self.groupnorm(x)
 
-        n, c, d, h, w = x.shape
-        x = x.view((n, c, d * h * w))
+        n, c, h, w = x.shape
+        x = x.view((n, c, h * w))
         x = x.transpose(-1, -2)
         x = self.attention(x)
         x = x.transpose(-1, -2)
-        x = x.view((n, c, d, h, w))
+        x = x.view((n, c, h, w))
 
         x += residue
         return x
@@ -63,15 +65,15 @@ class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.groupnorm_1 = nn.GroupNorm(32, in_channels)
-        self.conv_1 = nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
 
         self.groupnorm_2 = nn.GroupNorm(32, out_channels)
-        self.conv_2 = nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
 
         if in_channels == out_channels:
             self.residual_layer = nn.Identity()
         else:
-            self.residual_layer = nn.Conv3d(in_channels, out_channels, kernel_size=1, padding=0)
+            self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
 
     def forward(self, x):
         residue = x
@@ -97,23 +99,31 @@ class Decoder(nn.Module):
         self.latent_lr = model_pram['latent_lr']
 
         self.decoder = nn.ModuleList([
-            nn.Conv3d(1, 1, kernel_size=1, padding=0),
-            nn.Conv3d(1, 512, kernel_size=3, padding=1),
+            nn.Conv2d(1, 1, kernel_size=1, padding=0),
+            nn.Conv2d(1, 512, kernel_size=3, padding=1),
             ResidualBlock(512, 512),
             AttentionBlock(512),
             ResidualBlock(512, 512),
-            nn.Upsample(scale_factor=2),
-            nn.Conv3d(512, 256, kernel_size=3, padding=1),
-            ResidualBlock(256, 256),
-            nn.Upsample(scale_factor=2),
-            nn.Conv3d(256, 256, kernel_size=3, padding=1),
-            ResidualBlock(256, 256),
-            nn.Upsample(scale_factor=2),
-            nn.Conv3d(256, 128, kernel_size=3, padding=1),
+            ResidualBlock(512, 256),
+            ResidualBlock(256, 128),
             ResidualBlock(128, 128),
             nn.GroupNorm(32, 128),
             nn.SiLU(),
-            nn.Conv3d(128, 1, kernel_size=3, padding=1)
+            nn.Conv2d(128, 1, kernel_size=3, padding=1),
+        ])
+        
+        base = np.power(10, np.log10(np.prod(self.latent_dim)) / 3).astype(int)
+        self.upsampler_input_dim = (1, base, base, base)
+        
+        self.upsampler = nn.ModuleList([
+            nn.Upsample(scale_factor=2),
+            nn.Conv3d(1, 256, kernel_size=3, padding=1),
+            nn.Upsample(scale_factor=2),
+            nn.Conv3d(256, 128, kernel_size=3, padding=1),
+            nn.Upsample(scale_factor=2),
+            nn.GroupNorm(32, 128),
+            nn.SiLU(),
+            nn.Conv3d(128, 1, kernel_size=3, padding=1),            
         ])
 
         self.latents = nn.ParameterList([nn.Parameter(torch.randn(*self.latent_dim)) for _ in range(self.num_parts)])
@@ -125,6 +135,9 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         for layers in self.decoder:
+            x = layers(x)
+        x = x.view(-1, *self.upsampler_input_dim)
+        for layers in self.upsampler:
             x = layers(x)
         return x
 
