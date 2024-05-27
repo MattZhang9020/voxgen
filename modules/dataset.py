@@ -14,14 +14,14 @@ def sorted_char(list):
     return sorted(list, key=lambda key: [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', key)])
 
 class VoxelDataset(Dataset):
-    def __init__(self, data_dir_pth, each_chair_part_counts_npy_pth, outlier_objt_indices_npy_pth=None):
+    def __init__(self, data_dir_pth, each_chair_part_counts_npy_pth, outlier_objt_indices_npy_pth=None, designate_num_objts=None):
         self.data_dir_pth = data_dir_pth
         self.each_chair_part_counts_npy_pth = each_chair_part_counts_npy_pth
         self.outlier_objt_indices_npy_pth = outlier_objt_indices_npy_pth
         
         self.outlier_objt_indices = np.load(self.outlier_objt_indices_npy_pth) if self.outlier_objt_indices_npy_pth != None else None
         
-        self.each_chair_part_counts = np.load(self.each_chair_part_counts_npy_pth)[:10]
+        self.each_chair_part_counts = np.load(self.each_chair_part_counts_npy_pth)[:designate_num_objts]
         self.num_objts = len(self.each_chair_part_counts)
 
         if type(self.outlier_objt_indices) != None:
@@ -30,7 +30,7 @@ class VoxelDataset(Dataset):
             self.data_file_names = np.array(sorted_char(os.listdir(self.data_dir_pth)), dtype=str)
         self.num_parts = len(self.data_file_names)
         
-        self.voxel_coords = self._load_voxel_data()
+        self.parts_voxel_coords = self._load_voxel_data()
     
     def _get_data_names_excluding_outliers(self):
         data_file_names = np.array(sorted_char(os.listdir(self.data_dir_pth)), dtype=str)
@@ -58,12 +58,12 @@ class VoxelDataset(Dataset):
 
         with futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             data_file_paths = [os.path.join(self.data_dir_pth, file_name) for file_name in self.data_file_names]
-            voxel_coords = list(tqdm(executor.map(load_data, data_file_paths), total=len(data_file_paths)))
+            parts_voxel_coords = list(tqdm(executor.map(load_data, data_file_paths), total=len(data_file_paths)))
 
-        return voxel_coords
+        return parts_voxel_coords
 
     def __len__(self):
         return self.num_parts
 
     def __getitem__(self, idx):
-        return self.voxel_coords[idx]
+        return self.parts_voxel_coords[idx]

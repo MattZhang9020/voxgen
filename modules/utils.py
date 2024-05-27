@@ -1,5 +1,7 @@
 import torch
 
+import torch.nn as nn
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -36,7 +38,14 @@ def rotate_objt_along_axis(voxel_coords, rotation_angle, axis, voxel_map_shape=(
     return rotated_coords
 
 
-def plot_objt(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
+def get_voxel_map(voxel_coords, voxel_map_shape=(128, 128, 128)):
+    voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
+    for x, y, z in voxel_coords:
+        voxel_map[x, y, z] = 1.0
+    return voxel_map
+
+
+def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     base_idx = sum(dataset.each_chair_part_counts[:target_idx])
 
     voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
@@ -55,15 +64,51 @@ def plot_objt(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     ax.voxels(np.moveaxis(voxel_map, 1, -1))
 
     plt.show()
-    
+
+
+def plot_objt_by_decoder(decoder, latent_vars, each_chair_part_counts, target_idx, voxel_map_shape=(128, 128, 128)):
+    decoder.eval()
+
+    base_idx = sum(each_chair_part_counts[:target_idx])
+
+    voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
+
+    sig = nn.Sigmoid()
+
+    for i in range(base_idx, base_idx+each_chair_part_counts[target_idx]):
+        latent = latent_vars.latents[i].view(-1, 1, 64, 64)
+        pred = sig(decoder(latent))
+        voxel_coords = (pred > 0.7).nonzero()[:, 2:]
+
+        for x, y, z in voxel_coords:
+            voxel_map[x, y, z] = 1.0
+
+    ax = plt.figure().add_subplot(projection='3d')
+    ax.set_aspect('equal')
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+
+    ax.voxels(np.moveaxis(voxel_map, 1, -1))
+
+    plt.show()
+
+
+def plot_part_by_voxel_coords(voxel_coords):
+    voxel_map = get_voxel_map(voxel_coords)
+
+    ax = plt.figure().add_subplot(projection='3d')
+    ax.set_aspect('equal')
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+
+    ax.voxels(np.moveaxis(voxel_map, 1, -1))
+
+    plt.show()
+
 
 def dataloader_collate_fn(batch):
     return [torch.tensor(parts, dtype=torch.int) for parts in batch]
-
-
-def get_occurrence_map(voxel_coords, voxel_map_shape=(128, 128, 128)):
-    occurrence_map = torch.zeros(voxel_map_shape, dtype=torch.float32, pin_memory=True)
-    with torch.no_grad():
-        for coords in voxel_coords:
-            occurrence_map[coords] = 1.0
-    return occurrence_map

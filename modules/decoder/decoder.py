@@ -3,7 +3,6 @@ import torch
 import numpy as np
 
 from torch import nn
-from torch import optim
 from torch.nn import functional as F
 
 
@@ -90,13 +89,10 @@ class ResidualBlock(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, model_pram):
+    def __init__(self, latent_dim):
         super().__init__()
 
-        self.num_parts = model_pram['num_parts']
-        self.latent_dim = model_pram['latent_dim']
-        self.decoder_lr = model_pram['decoder_lr']
-        self.latent_lr = model_pram['latent_lr']
+        self.latent_dim = latent_dim
 
         self.decoder = nn.ModuleList([
             nn.Conv2d(1, 1, kernel_size=1, padding=0),
@@ -104,54 +100,61 @@ class Decoder(nn.Module):
             ResidualBlock(512, 512),
             AttentionBlock(512),
             ResidualBlock(512, 512),
-            ResidualBlock(512, 256),
-            ResidualBlock(256, 128),
-            ResidualBlock(128, 128),
-            nn.GroupNorm(32, 128),
+            ResidualBlock(512, 512),
+            ResidualBlock(512, 512),
+            ResidualBlock(512, 512),
+            nn.GroupNorm(32, 512),
             nn.SiLU(),
-            nn.Conv2d(128, 1, kernel_size=3, padding=1),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
         ])
-        
+
         base = np.power(10, np.log10(np.prod(self.latent_dim)) / 3).astype(int)
-        self.upsampler_input_dim = (1, base, base, base)
-        
-        self.upsampler = nn.ModuleList([
-            nn.Upsample(scale_factor=2),
-            nn.Conv3d(1, 256, kernel_size=3, padding=1),
-            nn.Upsample(scale_factor=2),
-            nn.Conv3d(256, 128, kernel_size=3, padding=1),
-            nn.Upsample(scale_factor=2),
+        self.upscaler_input_dim = (512, base, base, base)
+
+        self.upscaler = nn.ModuleList([
+            nn.ConvTranspose3d(512, 256, kernel_size=4, padding=1, stride=2),
+            nn.ConvTranspose3d(256, 256, kernel_size=4, padding=1, stride=2),
+            nn.ConvTranspose3d(256, 128, kernel_size=4, padding=1, stride=2),
             nn.GroupNorm(32, 128),
             nn.SiLU(),
-            nn.Conv3d(128, 1, kernel_size=3, padding=1),            
+            nn.Conv3d(128, 1, kernel_size=3, padding=1),
         ])
-
-        self.latents = nn.ParameterList([nn.Parameter(torch.randn(*self.latent_dim)) for _ in range(self.num_parts)])
-
-        self.decoder_optim = optim.AdamW(self.decoder.parameters(), lr=self.decoder_lr)
-        self.latent_optim = optim.AdamW(self.latents, lr=self.latent_lr)
-
-        self.loss_fn = nn.BCEWithLogitsLoss()
 
     def forward(self, x):
         for layers in self.decoder:
             x = layers(x)
-        x = x.view(-1, *self.upsampler_input_dim)
-        for layers in self.upsampler:
+
+        x = x.view(-1, *self.upscaler_input_dim)
+
+        for layers in self.upscaler:
             x = layers(x)
         return x
 
-    def train_step(self, indices, labels):
-        self.decoder_optim.zero_grad(set_to_none=True)
-        self.latent_optim.zero_grad(set_to_none=True)
 
-        latents_batch = torch.stack([self.latents[i] for i in indices])
-        outputs = self(latents_batch)
+class LatentVariables(nn.Module):
+    def __init__(self, num_parts, latent_dim):
+        super().__init__()
 
-        loss = self.loss_fn(outputs, labels)
-        loss.backward()
+        self.num_parts = num_parts
+        self.latent_dim = latent_dim
 
-        self.decoder_optim.step()
-        self.latent_optim.step()
+        self.latents = nn.Parameter(torch.randn(self.num_parts, *self.latent_dim, requires_grad=True))
 
-        return loss.item()
+    def forward(self, indices):
+        return self.latents[indices]
+
+
+class BCELoss(nn.Module):
+    def __init__(self, gamma=0.8):
+        super().__init__()
+        self.sigmoid = nn.Sigmoid()
+        self.gamma = gamma
+
+    def forward(self, outputs, targets, logits=False):
+        if logits:
+            outputs = self.sigmoid(outputs)
+            
+        loss = -self.gamma * targets * torch.log(outputs) - \
+            (1 - self.gamma) * (1 - targets) * torch.log(1 - outputs)
+            
+        return loss.mean()
