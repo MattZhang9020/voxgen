@@ -38,8 +38,8 @@ def rotate_objt_along_axis(voxel_coords, rotation_angle, axis, voxel_map_shape=(
     return rotated_coords
 
 
-def get_voxel_map(voxel_coords, voxel_map_shape=(128, 128, 128)):
-    voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
+def get_voxel_map(voxel_coords, device='cpu', voxel_map_shape=(128, 128, 128)):
+    voxel_map = torch.zeros(voxel_map_shape, dtype=torch.float, device=device)
     for x, y, z in voxel_coords:
         voxel_map[x, y, z] = 1.0
     return voxel_map
@@ -96,7 +96,7 @@ def plot_objt_by_decoder(decoder, latent_vars, each_chair_part_counts, target_id
 
 
 def plot_part_by_voxel_coords(voxel_coords):
-    voxel_map = get_voxel_map(voxel_coords)
+    voxel_map = get_voxel_map(voxel_coords).numpy()
 
     ax = plt.figure().add_subplot(projection='3d')
     ax.set_aspect('equal')
