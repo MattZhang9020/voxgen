@@ -66,7 +66,7 @@ def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     plt.show()
 
 
-def plot_objt_by_decoder(decoder, latent_vars, each_chair_part_counts, target_idx, voxel_map_shape=(128, 128, 128)):
+def plot_objt_by_decoder(decoder, latent_vars, each_chair_part_counts, target_idx, threshold, voxel_map_shape=(128, 128, 128)):
     decoder.eval()
 
     base_idx = sum(each_chair_part_counts[:target_idx])
@@ -78,7 +78,7 @@ def plot_objt_by_decoder(decoder, latent_vars, each_chair_part_counts, target_id
     for i in range(base_idx, base_idx+each_chair_part_counts[target_idx]):
         latent = latent_vars.latents[i].view(-1, 1, 64, 64)
         pred = sig(decoder(latent))
-        voxel_coords = (pred > 0.7).nonzero()[:, 2:]
+        voxel_coords = (pred > threshold).nonzero()[:, 2:]
 
         for x, y, z in voxel_coords:
             voxel_map[x, y, z] = 1.0

@@ -89,35 +89,36 @@ class ResidualBlock(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, latent_dim):
+    def __init__(self, latent_dim, inputr_ch=1, decoder_ch=512, upscaler_ch=8):
         super().__init__()
 
         self.latent_dim = latent_dim
 
         self.decoder = nn.ModuleList([
-            nn.Conv2d(1, 1, kernel_size=1, padding=0),
-            nn.Conv2d(1, 512, kernel_size=3, padding=1),
-            ResidualBlock(512, 512),
-            AttentionBlock(512),
-            ResidualBlock(512, 512),
-            ResidualBlock(512, 512),
-            ResidualBlock(512, 512),
-            ResidualBlock(512, 512),
-            nn.GroupNorm(32, 512),
+            nn.Conv2d(inputr_ch, inputr_ch, kernel_size=1, padding=0),
+            nn.Conv2d(inputr_ch, decoder_ch, kernel_size=3, padding=1),
+            ResidualBlock(decoder_ch, decoder_ch),
+            AttentionBlock(decoder_ch),
+            ResidualBlock(decoder_ch, decoder_ch),
+            nn.GroupNorm(32, decoder_ch),
             nn.SiLU(),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.Conv2d(decoder_ch, upscaler_ch, kernel_size=3, padding=1),
         ])
 
         base = np.power(10, np.log10(np.prod(self.latent_dim)) / 3).astype(int)
-        self.upscaler_input_dim = (512, base, base, base)
+        self.upscaler_input_dim = (upscaler_ch, base, base, base)
 
         self.upscaler = nn.ModuleList([
-            nn.ConvTranspose3d(512, 256, kernel_size=4, padding=1, stride=2),
-            nn.ConvTranspose3d(256, 256, kernel_size=4, padding=1, stride=2),
-            nn.ConvTranspose3d(256, 128, kernel_size=4, padding=1, stride=2),
-            nn.GroupNorm(32, 128),
+            nn.ConvTranspose3d(upscaler_ch, upscaler_ch, kernel_size=4, padding=1, stride=2),
+            nn.GroupNorm(2, upscaler_ch),
             nn.SiLU(),
-            nn.Conv3d(128, 1, kernel_size=3, padding=1),
+            nn.ConvTranspose3d(upscaler_ch, upscaler_ch, kernel_size=4, padding=1, stride=2),
+            nn.GroupNorm(2, upscaler_ch),
+            nn.SiLU(),
+            nn.ConvTranspose3d(upscaler_ch, upscaler_ch, kernel_size=4, padding=1, stride=2),
+            nn.GroupNorm(2, upscaler_ch),
+            nn.SiLU(),
+            nn.Conv3d(upscaler_ch, 1, kernel_size=1, padding=0),
         ])
 
     def forward(self, x):
@@ -145,16 +146,16 @@ class LatentVariables(nn.Module):
 
 
 class BCELoss(nn.Module):
-    def __init__(self, gamma=0.8):
-        super().__init__()
-        self.sigmoid = nn.Sigmoid()
-        self.gamma = gamma
+   def __init__(self, gamma=0.8, eps=1e-7):
+       super().__init__()
+       self.sigmoid = nn.Sigmoid()
+       self.gamma = gamma
+       self.eps = eps
 
-    def forward(self, outputs, targets, logits=False):
-        if logits:
-            outputs = self.sigmoid(outputs)
-            
-        loss = -self.gamma * targets * torch.log(outputs) - \
-            (1 - self.gamma) * (1 - targets) * torch.log(1 - outputs)
-            
-        return loss.mean()
+   def forward(self, outputs, targets, logits=False):
+       if logits:
+           outputs = self.sigmoid(outputs)
+       outputs = outputs.clamp(self.eps, 1 - self.eps)
+       loss = -self.gamma * targets * torch.log(outputs) - \
+              (1 - self.gamma) * (1 - targets) * torch.log(1 - outputs)
+       return loss.mean()
