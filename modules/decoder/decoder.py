@@ -1,161 +1,52 @@
-import torch
-
 import numpy as np
 
+from ..attention import AttentionBlock
+from ..residual import ResidualBlock
+
 from torch import nn
-from torch.nn import functional as F
-
-
-class SelfAttention(nn.Module):
-    def __init__(self, n_heads, d_embed, in_proj_bias=True, out_proj_bias=True):
-        super().__init__()
-        self.in_proj = nn.Linear(d_embed, 3 * d_embed, bias=in_proj_bias)
-        self.out_proj = nn.Linear(d_embed, d_embed, bias=out_proj_bias)
-        self.n_heads = n_heads
-        self.d_head = d_embed // n_heads
-
-    def forward(self, x, causal_mask=False):
-        input_shape = x.shape
-        batch_size, sequence_length, d_embed = input_shape
-        interim_shape = (batch_size, sequence_length, self.n_heads, self.d_head)
-
-        q, k, v = self.in_proj(x).chunk(3, dim=-1)
-
-        q = q.view(interim_shape).transpose(1, 2)
-        k = k.view(interim_shape).transpose(1, 2)
-        v = v.view(interim_shape).transpose(1, 2)
-
-        weight = q @ k.transpose(-1, -2)
-        if causal_mask:
-            mask = torch.ones_like(weight, dtype=torch.bool).triu(1)
-            weight.masked_fill_(mask, -torch.inf)
-        weight /= torch.sqrt(torch.tensor(self.d_head, dtype=torch.float))
-        weight = F.softmax(weight, dim=-1)
-
-        output = weight @ v
-        output = output.transpose(1, 2)
-        output = output.reshape(input_shape)
-        output = self.out_proj(output)
-        return output
-
-
-class AttentionBlock(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.groupnorm = nn.GroupNorm(32, channels)
-        self.attention = SelfAttention(1, channels)
-
-    def forward(self, x):
-        residue = x
-        x = self.groupnorm(x)
-
-        n, c, h, w = x.shape
-        x = x.view((n, c, h * w))
-        x = x.transpose(-1, -2)
-        x = self.attention(x)
-        x = x.transpose(-1, -2)
-        x = x.view((n, c, h, w))
-
-        x += residue
-        return x
-
-
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.groupnorm_1 = nn.GroupNorm(32, in_channels)
-        self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-
-        self.groupnorm_2 = nn.GroupNorm(32, out_channels)
-        self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-
-        if in_channels == out_channels:
-            self.residual_layer = nn.Identity()
-        else:
-            self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
-
-    def forward(self, x):
-        residue = x
-
-        x = self.groupnorm_1(x)
-        x = F.silu(x)
-        x = self.conv_1(x)
-
-        x = self.groupnorm_2(x)
-        x = F.silu(x)
-        x = self.conv_2(x)
-
-        return x + self.residual_layer(residue)
 
 
 class Decoder(nn.Module):
-    def __init__(self, latent_dim, inputr_ch=1, decoder_ch=512, upscaler_ch=8):
+    def __init__(self, latent_dim, in_ch=1, ld_ch=512, vd_ch=128):
         super().__init__()
 
         self.latent_dim = latent_dim
 
-        self.decoder = nn.ModuleList([
-            nn.Conv2d(inputr_ch, inputr_ch, kernel_size=1, padding=0),
-            nn.Conv2d(inputr_ch, decoder_ch, kernel_size=3, padding=1),
-            ResidualBlock(decoder_ch, decoder_ch),
-            AttentionBlock(decoder_ch),
-            ResidualBlock(decoder_ch, decoder_ch),
-            nn.GroupNorm(32, decoder_ch),
+        self.latent_decoder = nn.ModuleList([
+            nn.Conv2d(in_ch, in_ch, kernel_size=1, padding=0),
+            nn.Conv2d(in_ch, ld_ch, kernel_size=3, padding=1),
+            ResidualBlock(ld_ch, ld_ch),
+            AttentionBlock(ld_ch),
+            ResidualBlock(ld_ch, ld_ch),
+            ResidualBlock(ld_ch, ld_ch),
+            ResidualBlock(ld_ch, ld_ch),
+            nn.GroupNorm(32, ld_ch),
             nn.SiLU(),
-            nn.Conv2d(decoder_ch, upscaler_ch, kernel_size=3, padding=1),
+            nn.Conv2d(ld_ch, vd_ch, kernel_size=3, padding=1),
         ])
 
-        base = np.power(10, np.log10(np.prod(self.latent_dim)) / 3).astype(int)
-        self.upscaler_input_dim = (upscaler_ch, base, base, base)
+        base = np.ceil(np.power(10, np.log10(np.prod(self.latent_dim)) / 3)).astype(int)
+        self.voxel_decoder_input_dim = (vd_ch, base, base, base)
 
-        self.upscaler = nn.ModuleList([
-            nn.ConvTranspose3d(upscaler_ch, upscaler_ch, kernel_size=4, padding=1, stride=2),
-            nn.GroupNorm(2, upscaler_ch),
+        self.voxel_decoder = nn.ModuleList([
+            nn.ConvTranspose3d(vd_ch, vd_ch, kernel_size=2, padding=0, stride=2),
+            nn.GroupNorm(2, vd_ch),
             nn.SiLU(),
-            nn.ConvTranspose3d(upscaler_ch, upscaler_ch, kernel_size=4, padding=1, stride=2),
-            nn.GroupNorm(2, upscaler_ch),
+            nn.ConvTranspose3d(vd_ch, vd_ch, kernel_size=2, padding=0, stride=2),
+            nn.GroupNorm(2, vd_ch),
             nn.SiLU(),
-            nn.ConvTranspose3d(upscaler_ch, upscaler_ch, kernel_size=4, padding=1, stride=2),
-            nn.GroupNorm(2, upscaler_ch),
+            nn.ConvTranspose3d(vd_ch, vd_ch, kernel_size=2, padding=0, stride=2),
+            nn.GroupNorm(2, vd_ch),
             nn.SiLU(),
-            nn.Conv3d(upscaler_ch, 1, kernel_size=1, padding=0),
+            nn.Conv3d(vd_ch, 1, kernel_size=1, padding=0),
         ])
 
     def forward(self, x):
-        for layers in self.decoder:
+        for layers in self.latent_decoder:
             x = layers(x)
 
-        x = x.view(-1, *self.upscaler_input_dim)
+        x = x.view(-1, *self.voxel_decoder_input_dim)
 
-        for layers in self.upscaler:
+        for layers in self.voxel_decoder:
             x = layers(x)
         return x
-
-
-class LatentVariables(nn.Module):
-    def __init__(self, num_parts, latent_dim):
-        super().__init__()
-
-        self.num_parts = num_parts
-        self.latent_dim = latent_dim
-
-        self.latents = nn.Parameter(torch.randn(self.num_parts, *self.latent_dim, requires_grad=True))
-
-    def forward(self, indices):
-        return self.latents[indices]
-
-
-class BCELoss(nn.Module):
-   def __init__(self, gamma=0.8, eps=1e-7):
-       super().__init__()
-       self.sigmoid = nn.Sigmoid()
-       self.gamma = gamma
-       self.eps = eps
-
-   def forward(self, outputs, targets, logits=False):
-       if logits:
-           outputs = self.sigmoid(outputs)
-       outputs = outputs.clamp(self.eps, 1 - self.eps)
-       loss = -self.gamma * targets * torch.log(outputs) - \
-              (1 - self.gamma) * (1 - targets) * torch.log(1 - outputs)
-       return loss.mean()

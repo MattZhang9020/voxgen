@@ -66,18 +66,18 @@ def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     plt.show()
 
 
-def plot_objt_by_decoder(decoder, latent_vars, each_chair_part_counts, target_idx, threshold, voxel_map_shape=(128, 128, 128)):
+def plot_objt_by_models(encoder, decoder, dataset, target_idx, threshold, device='cpu', voxel_map_shape=(128, 128, 128)):
+    encoder.eval()
     decoder.eval()
 
-    base_idx = sum(each_chair_part_counts[:target_idx])
+    base_idx = sum(dataset.each_chair_part_counts[:target_idx])
 
     voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
 
-    sig = nn.Sigmoid()
-
-    for i in range(base_idx, base_idx+each_chair_part_counts[target_idx]):
-        latent = latent_vars.latents[i].view(-1, 1, 64, 64)
-        pred = sig(decoder(latent))
+    for i in range(base_idx, base_idx+dataset.each_chair_part_counts[target_idx]):
+        voxel_coords = get_voxel_map(dataset[i], device).view(1, 1, *voxel_map_shape)
+        latent = encoder(voxel_coords)
+        pred = torch.sigmoid(decoder(latent))
         voxel_coords = (pred > threshold).nonzero()[:, 2:]
 
         for x, y, z in voxel_coords:
