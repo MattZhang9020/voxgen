@@ -51,7 +51,7 @@ def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
 
     for i in range(base_idx, base_idx+dataset.each_chair_part_counts[target_idx]):
-        for x, y, z in dataset.voxel_coords[i]:
+        for x, y, z in dataset.parts_voxel_coords[i]:
             voxel_map[x, y, z] = 1.0
 
     ax = plt.figure().add_subplot(projection='3d')
