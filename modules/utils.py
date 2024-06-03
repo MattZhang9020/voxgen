@@ -1,9 +1,12 @@
+import random
+
 import torch
 
 import torch.nn as nn
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 
 def rotate_objt_along_axis(voxel_coords, rotation_angle, axis, voxel_map_shape=(128, 128, 128)):
@@ -45,7 +48,7 @@ def get_voxel_map(voxel_coords, device='cpu', voxel_map_shape=(128, 128, 128)):
     return voxel_map
 
 
-def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
+def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128), save=False):
     base_idx = sum(dataset.each_chair_part_counts[:target_idx])
 
     voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
@@ -66,7 +69,7 @@ def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128)):
     plt.show()
 
 
-def plot_objt_by_models(encoder, decoder, dataset, target_idx, threshold, device='cpu', voxel_map_shape=(128, 128, 128)):
+def plot_objt_by_models(encoder, decoder, dataset, target_idx, threshold, device='cpu', voxel_map_shape=(128, 128, 128), save=False):
     encoder.eval()
     decoder.eval()
 
@@ -95,7 +98,41 @@ def plot_objt_by_models(encoder, decoder, dataset, target_idx, threshold, device
     plt.show()
 
 
-def plot_part_by_voxel_coords(voxel_coords):
+def plot_objt_by_latents(decoder, latents, threshold, voxel_map_shape=(128, 128, 128), save=False):
+    decoder.eval()
+
+    voxel_maps = []
+
+    colors = [cm.rainbow(random.uniform(0, 1)) for _ in range(len(latents))]
+
+    for latent in latents:
+        voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
+
+        pred = torch.sigmoid(decoder(latent.view(1, 1, *latent.shape)))
+        voxel_coords = (pred > threshold).nonzero()[:, 2:]
+
+        for x, y, z in voxel_coords:
+            voxel_map[x, y, z] = 1.0
+
+        voxel_maps.append(voxel_map)
+
+    ax = plt.figure().add_subplot(projection='3d')
+    ax.set_aspect('equal')
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+
+    for voxel_map, color in zip(voxel_maps, colors):
+        ax.voxels(np.moveaxis(voxel_map, 1, -1), facecolors=color)
+
+    if save:
+        plt.savefig('fig.png')
+    else:
+        plt.show()
+
+
+def plot_part_by_voxel_coords(voxel_coords, save=False):
     voxel_map = get_voxel_map(voxel_coords).numpy()
 
     ax = plt.figure().add_subplot(projection='3d')
