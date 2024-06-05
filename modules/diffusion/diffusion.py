@@ -1,4 +1,5 @@
 import torch
+
 from torch import nn
 from torch.nn import functional as F
 
@@ -21,10 +22,10 @@ class ResidualBlock(nn.Module):
         super().__init__()
         self.groupnorm_feature = nn.GroupNorm(32, in_channels)
         self.conv_feature = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        
+
         self.linear_time = nn.Linear(n_time, out_channels)
 
-        self.groupnorm_merged = nn.GroupNorm(32, out_channels)     
+        self.groupnorm_merged = nn.GroupNorm(32, out_channels)
         self.conv_merged = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
 
         if in_channels == out_channels:
@@ -84,7 +85,7 @@ class UNet(nn.Module):
         super().__init__()
 
         self.encoders = nn.ModuleList([
-            SwitchSequential(nn.Conv2d(4, 320, kernel_size=3, padding=1)),
+            SwitchSequential(nn.Conv2d(1, 320, kernel_size=3, padding=1)),
             SwitchSequential(ResidualBlock(320, 320)),
             SwitchSequential(ResidualBlock(320, 320)),
             SwitchSequential(Downsample(320)),
@@ -106,16 +107,13 @@ class UNet(nn.Module):
         self.decoders = nn.ModuleList([
             SwitchSequential(ResidualBlock(2560, 1280)),
             SwitchSequential(ResidualBlock(2560, 1280)),
+            SwitchSequential(ResidualBlock(2560, 1280), Upsample(1280)),
             SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(Upsample(1280)),
             SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(ResidualBlock(1920, 1280)),
-            SwitchSequential(Upsample(1280)),
+            SwitchSequential(ResidualBlock(1920, 1280), Upsample(1280)),
             SwitchSequential(ResidualBlock(1920, 640)),
             SwitchSequential(ResidualBlock(1280, 640)),
-            SwitchSequential(ResidualBlock(960, 640)),
-            SwitchSequential(Upsample(640)),
+            SwitchSequential(ResidualBlock(960, 640), Upsample(640)),
             SwitchSequential(ResidualBlock(960, 320)),
             SwitchSequential(ResidualBlock(640, 320)),
             SwitchSequential(ResidualBlock(640, 320)),
@@ -154,7 +152,7 @@ class Diffusion(nn.Module):
         super().__init__()
         self.time_embedding = TimeEmbedding(320)
         self.unet = UNet()
-        self.final = FinalLayer(320, 4)
+        self.final = FinalLayer(320, 1)
 
     def forward(self, latent, time):
         time = self.time_embedding(time)
