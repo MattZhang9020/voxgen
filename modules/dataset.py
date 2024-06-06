@@ -23,7 +23,6 @@ class VoxelDataset(Dataset):
                  designate_num_objts=None,
                  train_test_split_ratio_train=0.9,
                  is_train=True):
-
         self.data_dir_pth = data_dir_pth
         self.each_chair_part_counts_npy_pth = each_chair_part_counts_npy_pth
         self.outlier_objt_indices_npy_pth = outlier_objt_indices_npy_pth
@@ -104,3 +103,16 @@ class VoxelDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.parts_voxel_coords[idx]
+
+
+class LatentDataset(Dataset):
+    def __init__(self, latents_remove_duplicate_npy_pth):
+        self.latents_remove_duplicate_npy_pth = latents_remove_duplicate_npy_pth
+        
+        self.latents = np.load(self.latents_remove_duplicate_npy_pth)
+    
+    def __len__(self):
+        return len(self.latents)
+    
+    def __getitem__(self, idx):
+        return self.latents[idx]
