@@ -66,7 +66,10 @@ def plot_objt_by_dataset(dataset, target_idx, voxel_map_shape=(128, 128, 128), s
 
     ax.voxels(np.moveaxis(voxel_map, 1, -1))
 
-    plt.show()
+    if save:
+        plt.savefig('fig.png')
+    else:
+        plt.show()
 
 
 def plot_objt_by_models(encoder, decoder, dataset, target_idx, threshold, device='cpu', voxel_map_shape=(128, 128, 128), save=False):
@@ -95,7 +98,10 @@ def plot_objt_by_models(encoder, decoder, dataset, target_idx, threshold, device
 
     ax.voxels(np.moveaxis(voxel_map, 1, -1))
 
-    plt.show()
+    if save:
+        plt.savefig('fig.png')
+    else:
+        plt.show()
 
 
 def plot_objt_by_latents(decoder, latents, threshold, voxel_map_shape=(128, 128, 128), save=False):
@@ -107,8 +113,7 @@ def plot_objt_by_latents(decoder, latents, threshold, voxel_map_shape=(128, 128,
 
     for latent in latents:
         voxel_map = np.zeros(voxel_map_shape, dtype=np.float32)
-
-        pred = torch.sigmoid(decoder(latent.view(1, 1, *latent.shape)))
+        pred = torch.sigmoid(decoder(latent.view(1, *latent.shape)))
         voxel_coords = (pred > threshold).nonzero()[:, 2:]
 
         for x, y, z in voxel_coords:
@@ -144,7 +149,10 @@ def plot_part_by_voxel_coords(voxel_coords, save=False):
 
     ax.voxels(np.moveaxis(voxel_map, 1, -1))
 
-    plt.show()
+    if save:
+        plt.savefig('fig.png')
+    else:
+        plt.show()
 
 
 def dataloader_collate_fn(batch):

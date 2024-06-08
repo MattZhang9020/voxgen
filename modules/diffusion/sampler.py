@@ -1,5 +1,7 @@
 import torch
 
+import numpy as np
+
 from .utils import extract, get_time_embedding
 
 from torch import nn
@@ -65,3 +67,41 @@ class VanillaDiffusionSampler(nn.Module):
         x_t = mean + torch.exp(0.5 * log_var) * noise
         
         return torch.clip(x_t, -1, 1)
+
+
+class KEulerDiffusionSampler(nn.Module):
+    def __init__(self, model, beta_start, beta_end, inference_steps=50, training_steps=1000):
+        super().__init__()
+        
+        self.model = model
+
+        betas = np.linspace(beta_start ** 0.5, beta_end ** 0.5, training_steps, dtype=np.float32) ** 2
+        alphas = 1.0 - betas
+        alphas_cumprod = np.cumprod(alphas, axis=0)
+        sigmas = ((1 - alphas_cumprod) / alphas_cumprod) ** 0.5
+        timesteps = np.linspace(training_steps - 1, 0, inference_steps)
+        log_sigmas = np.log(sigmas)
+        log_sigmas = np.interp(timesteps, range(training_steps), log_sigmas)
+        sigmas = np.exp(log_sigmas)
+        sigmas = np.append(sigmas, 0)
+        
+        self.register_buffer('sigmas', torch.tensor(sigmas, dtype=torch.float))
+        
+        self.initial_scale = sigmas.max()
+    
+    def _get_input_scale(self, time_step):
+        sigma = self.sigmas[time_step]
+        return 1 / (sigma ** 2 + 1) ** 0.5
+    
+    def forward(self, x_T, time_step):
+        t = x_T.new_ones([x_T.shape[0], ], dtype=torch.long) * time_step
+        
+        x_t = x_T * self._get_input_scale(t)
+        eps = self.model(x_t, get_time_embedding(t))
+                
+        sigma_from = self.sigmas[t]
+        sigma_to = self.sigmas[t + 1]
+        
+        x_T = x_T + eps * (sigma_to - sigma_from)
+        
+        return x_T
