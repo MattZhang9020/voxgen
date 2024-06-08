@@ -1,10 +1,9 @@
 import torch
 
-from torch import nn
-from torch.nn import functional as F
-
 from .utils import extract, get_time_embedding
 
+from torch import nn
+from torch.nn import functional as F
 
 class DiffusionTrainer(nn.Module):
     def __init__(self, model, beta_start, beta_end, steps):

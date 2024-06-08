@@ -1,0 +1,67 @@
+import torch
+
+from .utils import extract, get_time_embedding
+
+from torch import nn
+from torch.nn import functional as F
+
+
+class VanillaDiffusionSampler(nn.Module):
+    def __init__(self, model, beta_start, beta_end, steps):
+        super().__init__()
+
+        self.model = model
+
+        self.register_buffer('betas', torch.linspace(beta_start, beta_end, steps).double())
+        alphas = 1. - self.betas
+        alphas_bar = torch.cumprod(alphas, dim=0)
+        alphas_bar_prev = F.pad(alphas_bar, [1, 0], value=1)[:steps]
+
+        self.register_buffer('sqrt_recip_alphas_bar', torch.sqrt(1. / alphas_bar))
+        self.register_buffer('sqrt_recipm1_alphas_bar', torch.sqrt(1. / alphas_bar - 1))
+        
+        self.register_buffer('posterior_var', self.betas * (1. - alphas_bar_prev) / (1. - alphas_bar))
+        self.register_buffer('posterior_log_var_clipped', torch.log(torch.cat([self.posterior_var[1:2], self.posterior_var[1:]])))
+        
+        self.register_buffer('posterior_mean_coef1', torch.sqrt(alphas_bar_prev) * self.betas / (1. - alphas_bar))
+        self.register_buffer('posterior_mean_coef2', torch.sqrt(alphas) * (1. - alphas_bar_prev) / (1. - alphas_bar))
+
+    def q_mean_variance(self, x_0, x_t, t):
+        posterior_mean = (
+            extract(self.posterior_mean_coef1, t, x_t.shape) * x_0 +
+            extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
+        )
+        posterior_log_var_clipped = extract(self.posterior_log_var_clipped, t, x_t.shape)
+        return posterior_mean, posterior_log_var_clipped
+
+    def predict_xstart_from_eps(self, x_t, t, eps):
+        return (
+            extract(self.sqrt_recip_alphas_bar, t, x_t.shape) * x_t -
+            extract(self.sqrt_recipm1_alphas_bar, t, x_t.shape) * eps
+        )
+
+    def p_mean_variance(self, x_t, t):
+        model_log_var = torch.log(torch.cat([self.posterior_var[1:2], self.betas[1:]]))
+        model_log_var = extract(model_log_var, t, x_t.shape)
+
+        eps = self.model(x_t, get_time_embedding(t))
+        
+        x_0 = self.predict_xstart_from_eps(x_t, t, eps=eps)
+        
+        model_mean, _ = self.q_mean_variance(x_0, x_t, t)
+        
+        return model_mean, model_log_var
+
+    def forward(self, x_t, time_step):
+        t = x_t.new_ones([x_t.shape[0], ], dtype=torch.long) * time_step
+                        
+        mean, log_var = self.p_mean_variance(x_t, t)
+        
+        if time_step > 0:
+            noise = torch.randn_like(x_t)
+        else:
+            noise = 0
+            
+        x_t = mean + torch.exp(0.5 * log_var) * noise
+        
+        return torch.clip(x_t, -1, 1)

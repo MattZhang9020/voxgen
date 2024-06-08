@@ -5,7 +5,7 @@ import numpy as np
 
 from concurrent import futures
 
-from .utils import rotate_objt_along_axis
+from ..utils import rotate_objt_along_axis
 
 from torch.utils.data import Dataset
 from tqdm import tqdm
