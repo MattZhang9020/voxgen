@@ -7,7 +7,7 @@ from torch import nn
 
 
 class Encoder(nn.Module):
-    def __init__(self, latent_dim, in_ch=1, ve_ch=128, le_ch=512):
+    def __init__(self, latent_dim, in_ch=1, ve_ch=8, le_ch=512):
         super().__init__()
 
         self.latent_dim = latent_dim
