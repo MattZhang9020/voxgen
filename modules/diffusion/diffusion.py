@@ -1,5 +1,7 @@
 import torch
 
+from ..attention import SelfAttention
+
 from torch import nn
 from torch.nn import functional as F
 
@@ -51,6 +53,50 @@ class ResidualBlock(nn.Module):
         return merged + self.residual_layer(residue)
 
 
+class AttentionBlock(nn.Module):
+    def __init__(self, n_head, n_embd):
+        super().__init__()
+        channels = n_head * n_embd
+
+        self.groupnorm = nn.GroupNorm(32, channels, eps=1e-6)
+        self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+
+        self.layernorm_1 = nn.LayerNorm(channels)
+        self.attention_1 = SelfAttention(n_head, channels, in_proj_bias=False)
+        self.layernorm_2 = nn.LayerNorm(channels)
+        self.linear_geglu_1 = nn.Linear(channels, 4 * channels * 2)
+        self.linear_geglu_2 = nn.Linear(4 * channels, channels)
+
+        self.conv_output = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+
+    def forward(self, x):
+        residue_long = x
+
+        x = self.groupnorm(x)
+        x = self.conv_input(x)
+
+        n, c, h, w = x.shape
+        x = x.view((n, c, h * w))   # (n, c, hw)
+        x = x.transpose(-1, -2)     # (n, hw, c)
+
+        residue_short = x
+        x = self.layernorm_1(x)
+        x = self.attention_1(x)
+        x += residue_short
+
+        residue_short = x
+        x = self.layernorm_2(x)
+        x, gate = self.linear_geglu_1(x).chunk(2, dim=-1)
+        x = x * F.gelu(gate)
+        x = self.linear_geglu_2(x)
+        x += residue_short
+
+        x = x.transpose(-1, -2)   # (n, c, hw)
+        x = x.view((n, c, h, w))  # (n, c, h, w)
+
+        return self.conv_output(x) + residue_long
+
+
 class Upsample(nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -75,6 +121,8 @@ class SwitchSequential(nn.Sequential):
         for layer in self:
             if isinstance(layer, ResidualBlock):
                 x = layer(x, time)
+            elif isinstance(layer, AttentionBlock):
+                x = layer(x)
             else:
                 x = layer(x)
         return x
@@ -86,14 +134,14 @@ class UNet(nn.Module):
 
         self.encoders = nn.ModuleList([
             SwitchSequential(nn.Conv2d(1, 320, kernel_size=3, padding=1)),
-            SwitchSequential(ResidualBlock(320, 320)),
-            SwitchSequential(ResidualBlock(320, 320)),
+            SwitchSequential(ResidualBlock(320, 320), AttentionBlock(8, 40)),
+            SwitchSequential(ResidualBlock(320, 320), AttentionBlock(8, 40)),
             SwitchSequential(Downsample(320)),
-            SwitchSequential(ResidualBlock(320, 640)),
-            SwitchSequential(ResidualBlock(640, 640)),
+            SwitchSequential(ResidualBlock(320, 640), AttentionBlock(8, 80)),
+            SwitchSequential(ResidualBlock(640, 640), AttentionBlock(8, 80)),
             SwitchSequential(Downsample(640)),
-            SwitchSequential(ResidualBlock(640, 1280)),
-            SwitchSequential(ResidualBlock(1280, 1280)),
+            SwitchSequential(ResidualBlock(640, 1280), AttentionBlock(8, 160)),
+            SwitchSequential(ResidualBlock(1280, 1280), AttentionBlock(8, 160)),
             SwitchSequential(Downsample(1280)),
             SwitchSequential(ResidualBlock(1280, 1280)),
             SwitchSequential(ResidualBlock(1280, 1280)),
@@ -101,6 +149,7 @@ class UNet(nn.Module):
 
         self.bottleneck = SwitchSequential(
             ResidualBlock(1280, 1280),
+            AttentionBlock(8, 160),
             ResidualBlock(1280, 1280),
         )
 
@@ -108,15 +157,15 @@ class UNet(nn.Module):
             SwitchSequential(ResidualBlock(2560, 1280)),
             SwitchSequential(ResidualBlock(2560, 1280)),
             SwitchSequential(ResidualBlock(2560, 1280), Upsample(1280)),
-            SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(ResidualBlock(1920, 1280), Upsample(1280)),
-            SwitchSequential(ResidualBlock(1920, 640)),
-            SwitchSequential(ResidualBlock(1280, 640)),
-            SwitchSequential(ResidualBlock(960, 640), Upsample(640)),
-            SwitchSequential(ResidualBlock(960, 320)),
-            SwitchSequential(ResidualBlock(640, 320)),
-            SwitchSequential(ResidualBlock(640, 320)),
+            SwitchSequential(ResidualBlock(2560, 1280), AttentionBlock(8, 160)),
+            SwitchSequential(ResidualBlock(2560, 1280), AttentionBlock(8, 160)),
+            SwitchSequential(ResidualBlock(1920, 1280), AttentionBlock(8, 160), Upsample(1280)),
+            SwitchSequential(ResidualBlock(1920, 640), AttentionBlock(8, 80)),
+            SwitchSequential(ResidualBlock(1280, 640), AttentionBlock(8, 80)),
+            SwitchSequential(ResidualBlock(960, 640), AttentionBlock(8, 80), Upsample(640)),
+            SwitchSequential(ResidualBlock(960, 320), AttentionBlock(8, 40)),
+            SwitchSequential(ResidualBlock(640, 320), AttentionBlock(8, 40)),
+            SwitchSequential(ResidualBlock(640, 320), AttentionBlock(8, 40)),
         ])
 
     def forward(self, x, time):
