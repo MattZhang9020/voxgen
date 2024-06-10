@@ -20,15 +20,6 @@ def get_time_embedding(timestep, max_period=10000, time_embed_dim=160):
     return embedding
 
 
-def linear_beta_schedule(timesteps, beta_start, beta_end):
-    return torch.linspace(beta_start, beta_end, timesteps)
-
-
 def sigmoid_beta_schedule(timesteps, beta_start, beta_end):
     betas = torch.linspace(-6, 6, timesteps)
     return torch.sigmoid(betas) * (beta_end - beta_start) + beta_start
-
-
-def extract(v, t, x_shape):
-    out = torch.gather(v, index=t, dim=0).float()
-    return out.view([t.shape[0]] + [1] * (len(x_shape) - 1))
