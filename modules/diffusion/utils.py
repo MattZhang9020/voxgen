@@ -1,9 +1,7 @@
 import torch
 
 
-def get_time_embedding(timestep, max_period=10000):
-    time_embed_dim = 320
-    
+def get_time_embedding(timestep, max_period=10000, time_embed_dim=160):
     half = time_embed_dim // 2
     
     log_max_period = torch.log(torch.tensor(max_period))

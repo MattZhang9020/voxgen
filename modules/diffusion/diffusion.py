@@ -20,7 +20,7 @@ class TimeEmbedding(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, n_time=1280):
+    def __init__(self, in_channels, out_channels, n_time=640):
         super().__init__()
         self.groupnorm_feature = nn.GroupNorm(32, in_channels)
         self.conv_feature = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
@@ -77,7 +77,7 @@ class AttentionBlock(nn.Module):
 
         n, c, h, w = x.shape
         x = x.view((n, c, h * w))   # (n, c, hw)
-        x = x.transpose(-1, -2)     # (n, hw, c)
+        x = x.transpose(-1, -2).contiguous()     # (n, hw, c)
 
         residue_short = x
         x = self.layernorm_1(x)
@@ -91,7 +91,7 @@ class AttentionBlock(nn.Module):
         x = self.linear_geglu_2(x)
         x += residue_short
 
-        x = x.transpose(-1, -2)   # (n, c, hw)
+        x = x.transpose(-1, -2).contiguous()   # (n, c, hw)
         x = x.view((n, c, h, w))  # (n, c, h, w)
 
         return self.conv_output(x) + residue_long
@@ -133,39 +133,39 @@ class UNet(nn.Module):
         super().__init__()
 
         self.encoders = nn.ModuleList([
-            SwitchSequential(nn.Conv2d(1, 320, kernel_size=3, padding=1)),
-            SwitchSequential(ResidualBlock(320, 320), AttentionBlock(8, 40)),
+            SwitchSequential(nn.Conv2d(1, 160, kernel_size=3, padding=1)),
+            SwitchSequential(ResidualBlock(160, 160), AttentionBlock(8, 20)),
+            SwitchSequential(ResidualBlock(160, 160), AttentionBlock(8, 20)),
+            SwitchSequential(Downsample(160)),
+            SwitchSequential(ResidualBlock(160, 320), AttentionBlock(8, 40)),
             SwitchSequential(ResidualBlock(320, 320), AttentionBlock(8, 40)),
             SwitchSequential(Downsample(320)),
             SwitchSequential(ResidualBlock(320, 640), AttentionBlock(8, 80)),
             SwitchSequential(ResidualBlock(640, 640), AttentionBlock(8, 80)),
             SwitchSequential(Downsample(640)),
-            SwitchSequential(ResidualBlock(640, 1280), AttentionBlock(8, 160)),
-            SwitchSequential(ResidualBlock(1280, 1280), AttentionBlock(8, 160)),
-            SwitchSequential(Downsample(1280)),
-            SwitchSequential(ResidualBlock(1280, 1280)),
-            SwitchSequential(ResidualBlock(1280, 1280)),
+            SwitchSequential(ResidualBlock(640, 640)),
+            SwitchSequential(ResidualBlock(640, 640)),
         ])
-
+        
         self.bottleneck = SwitchSequential(
-            ResidualBlock(1280, 1280),
-            AttentionBlock(8, 160),
-            ResidualBlock(1280, 1280),
+            ResidualBlock(640, 640),
+            AttentionBlock(8, 80),
+            ResidualBlock(640, 640),
         )
-
+        
         self.decoders = nn.ModuleList([
-            SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(ResidualBlock(2560, 1280)),
-            SwitchSequential(ResidualBlock(2560, 1280), Upsample(1280)),
-            SwitchSequential(ResidualBlock(2560, 1280), AttentionBlock(8, 160)),
-            SwitchSequential(ResidualBlock(2560, 1280), AttentionBlock(8, 160)),
-            SwitchSequential(ResidualBlock(1920, 1280), AttentionBlock(8, 160), Upsample(1280)),
-            SwitchSequential(ResidualBlock(1920, 640), AttentionBlock(8, 80)),
+            SwitchSequential(ResidualBlock(1280, 640)),
+            SwitchSequential(ResidualBlock(1280, 640)),
+            SwitchSequential(ResidualBlock(1280, 640), Upsample(640)),
+            SwitchSequential(ResidualBlock(1280, 640), AttentionBlock(8, 80)),
             SwitchSequential(ResidualBlock(1280, 640), AttentionBlock(8, 80)),
             SwitchSequential(ResidualBlock(960, 640), AttentionBlock(8, 80), Upsample(640)),
             SwitchSequential(ResidualBlock(960, 320), AttentionBlock(8, 40)),
             SwitchSequential(ResidualBlock(640, 320), AttentionBlock(8, 40)),
-            SwitchSequential(ResidualBlock(640, 320), AttentionBlock(8, 40)),
+            SwitchSequential(ResidualBlock(480, 320), AttentionBlock(8, 40), Upsample(320)),
+            SwitchSequential(ResidualBlock(480, 160), AttentionBlock(8, 20)),
+            SwitchSequential(ResidualBlock(320, 160), AttentionBlock(8, 20)),
+            SwitchSequential(ResidualBlock(320, 160), AttentionBlock(8, 20)),
         ])
 
     def forward(self, x, time):
@@ -199,9 +199,9 @@ class FinalLayer(nn.Module):
 class Diffusion(nn.Module):
     def __init__(self):
         super().__init__()
-        self.time_embedding = TimeEmbedding(320)
+        self.time_embedding = TimeEmbedding(160)
         self.unet = UNet()
-        self.final = FinalLayer(320, 1)
+        self.final = FinalLayer(160, 1)
 
     def forward(self, latent, time):
         time = self.time_embedding(time)
