@@ -29,12 +29,21 @@ class DiffusionTrainer():
         return x_T
 
     def __call__(self, x_0):
-        t = torch.randint(self.steps, size=(x_0.shape[0], ), device=x_0.device)
+        t = np.random.randint(self.steps, size=(x_0.shape[0], ))
 
         noise = torch.randn_like(x_0, device=x_0.device)
 
-        x_t = self.sqrt_alphas_bar[t] * x_0 + self.sqrt_one_minus_alphas_bar[t] * noise
+        sqrt_alphas_bar = torch.tensor(self.sqrt_alphas_bar[t], device=x_0.device, dtype=torch.float)
+        sqrt_alphas_bar = sqrt_alphas_bar.view([t.shape[0]] + [1] * (len(x_0.shape) - 1))
+        
+        sqrt_one_minus_alphas_bar = torch.tensor(self.sqrt_one_minus_alphas_bar[t], device=x_0.device, dtype=torch.float)
+        sqrt_one_minus_alphas_bar = sqrt_one_minus_alphas_bar.view([t.shape[0]] + [1] * (len(x_0.shape) - 1))
+        
+        x_t = sqrt_alphas_bar * x_0 + sqrt_one_minus_alphas_bar * noise
+        
+        t_embed = get_time_embedding(t)
+        t_embed = torch.tensor(t_embed, device=x_0.device, dtype=torch.float)
 
-        loss = F.mse_loss(self.model(x_t, get_time_embedding(t)), noise)
+        loss = F.mse_loss(self.model(x_t, t_embed), noise)
 
         return loss
