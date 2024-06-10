@@ -12,9 +12,8 @@ class DiffusionTrainer(nn.Module):
         self.model = model
         self.steps = steps
 
-        self.register_buffer('betas', torch.linspace(beta_start, beta_end, steps).double())
-
-        alphas = 1. - self.betas
+        betas = torch.linspace(beta_start, beta_end, steps).double()
+        alphas = 1. - betas
         alphas_bar = torch.cumprod(alphas, dim=0)
 
         self.register_buffer('sqrt_alphas_bar', torch.sqrt(alphas_bar))

@@ -75,7 +75,7 @@ class KEulerDiffusionSampler(nn.Module):
         
         self.model = model
 
-        betas = np.linspace(beta_start ** 0.5, beta_end ** 0.5, training_steps, dtype=np.float32) ** 2
+        betas = np.linspace(beta_start ** 0.5, beta_end ** 0.5, training_steps, dtype=np.float64) ** 2
         alphas = 1.0 - betas
         alphas_cumprod = np.cumprod(alphas, axis=0)
         sigmas = ((1 - alphas_cumprod) / alphas_cumprod) ** 0.5
@@ -85,7 +85,7 @@ class KEulerDiffusionSampler(nn.Module):
         sigmas = np.exp(log_sigmas)
         sigmas = np.append(sigmas, 0)
         
-        self.register_buffer('sigmas', torch.tensor(sigmas, dtype=torch.float))
+        self.register_buffer('sigmas', torch.tensor(sigmas))
         
         self.initial_scale = sigmas.max()
     
@@ -94,6 +94,9 @@ class KEulerDiffusionSampler(nn.Module):
         return 1 / (sigma ** 2 + 1) ** 0.5
     
     def forward(self, x_T, time_step):
+        if time_step == 0:
+            x_T = x_T * self.initial_scale
+            
         t = x_T.new_ones([x_T.shape[0], ], dtype=torch.long) * time_step
         
         x_t = x_T * self._get_input_scale(t)
