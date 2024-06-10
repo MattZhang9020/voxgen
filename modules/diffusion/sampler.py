@@ -2,19 +2,19 @@ import torch
 
 import numpy as np
 
-from .utils import extract, get_time_embedding
+from .utils import extract, get_time_embedding, sigmoid_beta_schedule
 
 from torch import nn
 from torch.nn import functional as F
 
 
 class VanillaDiffusionSampler(nn.Module):
-    def __init__(self, model, beta_start, beta_end, steps):
+    def __init__(self, model, steps, beta_start, beta_end):
         super().__init__()
 
         self.model = model
 
-        self.register_buffer('betas', torch.linspace(beta_start, beta_end, steps).double())
+        self.register_buffer('betas', sigmoid_beta_schedule(steps, beta_start, beta_end).double())
         alphas = 1. - self.betas
         alphas_bar = torch.cumprod(alphas, dim=0)
         alphas_bar_prev = F.pad(alphas_bar, [1, 0], value=1)[:steps]

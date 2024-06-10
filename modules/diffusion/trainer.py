@@ -1,18 +1,18 @@
 import torch
 
-from .utils import extract, get_time_embedding
+from .utils import extract, get_time_embedding, sigmoid_beta_schedule
 
 from torch import nn
 from torch.nn import functional as F
 
 class DiffusionTrainer(nn.Module):
-    def __init__(self, model, beta_start, beta_end, steps):
+    def __init__(self, model, steps, beta_start, beta_end):
         super().__init__()
 
         self.model = model
         self.steps = steps
 
-        betas = torch.linspace(beta_start, beta_end, steps).double()
+        betas = sigmoid_beta_schedule(steps, beta_start, beta_end).double()
         alphas = 1. - betas
         alphas_bar = torch.cumprod(alphas, dim=0)
 
