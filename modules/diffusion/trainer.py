@@ -2,7 +2,7 @@ import torch
 
 import numpy as np
 
-from .utils import get_time_embedding, sigmoid_beta_schedule
+from .utils import embed_sinusoidal_position, sigmoid_beta_schedule
 
 from torch.nn import functional as F
 
@@ -47,7 +47,7 @@ class DiffusionTrainer():
         
         x_t = sqrt_alphas_bar * x_0 + sqrt_one_minus_alphas_bar * noise
         
-        t_embed = get_time_embedding(t)
+        t_embed = embed_sinusoidal_position(t)
         t_embed = torch.tensor(t_embed, device=x_0.device, dtype=torch.float)
 
         loss = F.mse_loss(self.model(x_t, t_embed), noise)

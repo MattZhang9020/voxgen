@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 
-def get_time_embedding(timestep, max_period=10000, time_embed_dim=160):
+def embed_sinusoidal_position(timestep, max_period=10000, time_embed_dim=160):
     half = time_embed_dim // 2
     
     log_max_period = np.log(max_period)
