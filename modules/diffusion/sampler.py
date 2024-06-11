@@ -30,11 +30,15 @@ class KEulerDiffusionSampler():
     def __call__(self, x_T, time_step):
         if time_step == 0:
             x_T = x_T * self.initial_scale
-            
-        t = x_T.new_ones([x_T.shape[0], ], dtype=torch.long) * time_step
+                
+        t = time_step
         
         x_t = x_T * self._get_input_scale(t)
-        eps = self.model(x_t, get_time_embedding(t))
+        
+        t_embed = get_time_embedding(np.array([t], dtype=int))
+        t_embed = torch.tensor(t_embed, device=x_t.device, dtype=torch.float)
+        
+        eps = self.model(x_t, t_embed)
                 
         sigma_from = self.sigmas[t]
         sigma_to = self.sigmas[t + 1]

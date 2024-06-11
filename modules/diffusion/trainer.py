@@ -20,11 +20,17 @@ class DiffusionTrainer():
         self.sqrt_one_minus_alphas_bar = np.sqrt(1. - alphas_bar)
 
     def get_x_T(self, x_0):
-        t = x_0.new_ones([x_0.shape[0], ], dtype=torch.long) * (self.steps-1)
+        t = np.ones([x_0.shape[0], ], dtype=int) * (self.steps-1)
+        
+        sqrt_alphas_bar = torch.tensor(self.sqrt_alphas_bar[t], device=x_0.device, dtype=torch.float)
+        sqrt_alphas_bar = sqrt_alphas_bar.view([t.shape[0]] + [1] * (len(x_0.shape) - 1))
+        
+        sqrt_one_minus_alphas_bar = torch.tensor(self.sqrt_one_minus_alphas_bar[t], device=x_0.device, dtype=torch.float)
+        sqrt_one_minus_alphas_bar = sqrt_one_minus_alphas_bar.view([t.shape[0]] + [1] * (len(x_0.shape) - 1))
 
         noise = torch.randn_like(x_0, device=x_0.device)
 
-        x_T = self.sqrt_alphas_bar[t] * x_0 + self.sqrt_one_minus_alphas_bar[t] * noise
+        x_T = sqrt_alphas_bar * x_0 + sqrt_one_minus_alphas_bar * noise
 
         return x_T
 
